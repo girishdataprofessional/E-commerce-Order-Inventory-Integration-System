@@ -19,6 +19,18 @@ Built with FastAPI, Celery, Redis, PostgreSQL, SQLAlchemy, and Streamlit.
 
 ---
 
+## Key Features
+
+- **Real-time Order Webhook** – Accepts Shopify-style order payloads with built-in duplicate detection
+- **Async Processing** – Celery + Redis workers handle orders in the background without blocking the API
+- **Inventory Sync** – Automatically deducts stock on fulfillment, flags low-stock and out-of-stock items
+- **Retry with Backoff** – Failed tasks retry up to 3 times with exponential delays (60s → 120s → 240s)
+- **Full Audit Trail** – Every task execution (success, failure, retry) is logged to `sync_logs`
+- **Live Monitoring Dashboard** – Streamlit UI showing KPIs, order feed, inventory charts, task status, and system health
+- **Demo Mode** – Run the dashboard standalone with sample data, no database needed
+
+---
+
 ## Architecture
 
 ```
