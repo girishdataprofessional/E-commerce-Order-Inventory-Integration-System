@@ -1,0 +1,102 @@
+version: "3.8"
+
+services:
+  # ───────────────────────────────────────────────
+  # PostgreSQL Database
+  # ───────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fulfil_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fulfil_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-fulfil_erp}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fulfil_user} -d ${POSTGRES_DB:-fulfil_erp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ───────────────────────────────────────────────
+  # Redis Message Broker
+  # ───────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ───────────────────────────────────────────────
+  # FastAPI Application Server
+  # ───────────────────────────────────────────────
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ───────────────────────────────────────────────
+  # Celery Worker (async task processing)
+  # ───────────────────────────────────────────────
+  celery_worker:
+    build: .
+    command: celery -A app.celery_app:celery worker --loglevel=info --concurrency=2 -Q default,orders
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ───────────────────────────────────────────────
+  # Celery Beat (periodic task scheduler)
+  # ───────────────────────────────────────────────
+  celery_beat:
+    build: .
+    command: celery -A app.celery_app:celery beat --loglevel=info
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ───────────────────────────────────────────────
+  # Streamlit Monitoring Dashboard
+  # ───────────────────────────────────────────────
+  dashboard:
+    build: .
+    command: streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
